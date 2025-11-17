@@ -7,7 +7,7 @@ export default function Login({ onLogin }) {
   const [error, setError] = useState("");
 
   const handleLogin = () => {
-    if (usuario === "admin" && clave === "1234") {
+    if (usuario.toLowerCase() === "admin" && clave === "1234") {
       localStorage.setItem("usuario_logueado", usuario);
       onLogin(usuario);
     } else {
@@ -37,7 +37,6 @@ export default function Login({ onLogin }) {
             onChange={(e) => setClave(e.target.value)}
           />
 
-          {/* Contenedor del botón con tooltip */}
           <div className="tooltip-container">
             <button className="btn login-btn" onClick={handleLogin}>
               Ingresar

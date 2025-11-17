@@ -19,7 +19,6 @@ export default function Cotizacion({ onBack }) {
     cargarProductos();
   }, []);
 
-  // 🔹 Cargar productos desde Supabase
   const cargarProductos = async () => {
     const { data, error } = await supabase.from("productos").select("*");
     if (error) {
@@ -30,7 +29,6 @@ export default function Cotizacion({ onBack }) {
     }
   };
 
-  // ➕ Agregar producto a la cotización
   const agregarItem = () => {
     if (!nuevo.producto_id) return alert("Seleccioná un producto");
 
@@ -52,7 +50,6 @@ export default function Cotizacion({ onBack }) {
 
   const totalCotizacion = items.reduce((sum, it) => sum + it.total, 0);
 
-  // 🧾 Generar PDF
   const generarPDF = () => {
     const doc = new jsPDF();
     doc.setFontSize(16);

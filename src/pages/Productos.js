@@ -9,67 +9,47 @@ import { InputNumber } from "primereact/inputnumber";
 import { Toast } from "primereact/toast";
 
 export default function Productos({ onBack }) {
-  // ----------------- STATE -----------------
   const [productos, setProductos] = useState([]);
 
-  // form de "agregar producto nuevo"
-  const [nuevo, setNuevo] = useState({
-    codigo_interno: "",
-    objeto: "",
-    descripcion: "",
-    cantidad: null,
-    precio: null,
-  });
-
-  // estado edición
+  const [nuevo, setNuevo] = useState(initProducto());
   const [editVisible, setEditVisible] = useState(false);
-  const [editData, setEditData] = useState({
-    id: null, // puede existir o no en la DB
-    codigo_interno: "",
-    objeto: "",
-    descripcion: "",
-    cantidad: 0,
-    precio: 0,
-  });
+  const [editData, setEditData] = useState(initProductoConId());
 
-  // estado "dar de baja"
   const [deleteVisible, setDeleteVisible] = useState(false);
   const [productoAEliminar, setProductoAEliminar] = useState(null);
   const [eliminando, setEliminando] = useState(false);
-
   const toast = useRef(null);
 
-  // ----------------- EFFECT: CARGA INICIAL -----------------
-  useEffect(() => {
-    cargarProductos();
-  }, []);
 
-  const cargarProductos = async () => {
-    const { data, error } = await supabase
-      .from("productos")
-      .select("*")
-      .eq("activo", true); // solo activos
+  function initProducto() {
+    return {
+      codigo_interno: "",
+      objeto: "",
+      descripcion: "",
+      cantidad: 0,
+      precio: 0,
+    };
+  }
 
-    if (error) {
-      console.error("Error al cargar productos:", error);
-      toast.current?.show({
-        severity: "error",
-        summary: "Error",
-        detail: "No se pudieron cargar los productos",
-      });
-    } else {
-      setProductos(data || []);
-    }
-  };
+  function initProductoConId() {
+    return {
+      id: null,
+      ...initProducto(),
+    };
+  }
 
-  // ----------------- VALIDACIONES COMUNES -----------------
-  const validarCamposProducto = (data) => {
-    // textos obligatorios
-    if (
-      !data.codigo_interno?.trim() ||
-      !data.objeto?.trim() ||
-      !data.descripcion?.trim()
-    ) {
+  function normalizarProducto(p) {
+    return {
+      codigo_interno: p.codigo_interno.trim(),
+      objeto: p.objeto.trim(),
+      descripcion: p.descripcion.trim(),
+      cantidad: Number(p.cantidad),
+      precio: Number(p.precio),
+    };
+  }
+
+  const validarProducto = (data) => {
+    if (!data.codigo_interno?.trim() || !data.objeto?.trim() || !data.descripcion?.trim()) {
       toast.current.show({
         severity: "warn",
         summary: "Atención",
@@ -78,7 +58,6 @@ export default function Productos({ onBack }) {
       return false;
     }
 
-    // numéricos obligatorios y >= 0
     if (
       data.cantidad === null ||
       data.precio === null ||
@@ -98,138 +77,104 @@ export default function Productos({ onBack }) {
     return true;
   };
 
-  // ----------------- AGREGAR PRODUCTO -----------------
-  const agregarProducto = async () => {
-    if (!validarCamposProducto(nuevo)) return;
+  const manejarNumero = (valor) => (valor !== undefined && valor !== null ? valor : "");
 
-    const { error } = await supabase.from("productos").insert([
-      {
-        codigo_interno: nuevo.codigo_interno.trim(),
-        objeto: nuevo.objeto.trim(),
-        descripcion: nuevo.descripcion.trim(),
-        cantidad: Number(nuevo.cantidad),
-        precio: Number(nuevo.precio),
-        activo: true,
-      },
-    ]);
+  const actualizarListaLocal = (filtro, nuevosDatos) => {
+    setProductos((prev) =>
+      prev.map((p) =>
+        filtro(p)
+          ? {
+              ...p,
+              ...nuevosDatos,
+            }
+          : p
+      )
+    );
+  };
+
+  const filtrarPorId = (item) => (p) => p.id === item.id;
+  const filtrarPorCodigo = (item) => (p) => p.codigo_interno === item.codigo_interno;
+
+  const tieneId = (item) => Boolean(item?.id);
+
+
+  useEffect(() => {
+    cargarProductos();
+  }, []);
+
+  const cargarProductos = async () => {
+    const { data, error } = await supabase.from("productos").select("*").eq("activo", true);
 
     if (error) {
-      console.error(error);
-      toast.current.show({
+      console.error("Error al cargar productos:", error);
+      toast.current?.show({
         severity: "error",
         summary: "Error",
-        detail: "No se pudo agregar el producto",
+        detail: "No se pudieron cargar los productos",
       });
       return;
     }
 
-    toast.current.show({
-      severity: "success",
-      summary: "Éxito",
-      detail: "Producto agregado",
-    });
+    setProductos(data || []);
+  };
 
-    // limpio el form
-    setNuevo({
-      codigo_interno: "",
-      objeto: "",
-      descripcion: "",
-      cantidad: 0,
-      precio: 0,
-    });
 
-    // recargo lista desde la DB
+  const agregarProducto = async () => {
+    if (!validarProducto(nuevo)) return;
+
+    const dataNormalizada = normalizarProducto(nuevo);
+
+    const { error } = await supabase.from("productos").insert([{ ...dataNormalizada, activo: true }]);
+
+    if (error) {
+      console.error(error);
+      toast.current.show({ severity: "error", summary: "Error", detail: "No se pudo agregar el producto" });
+      return;
+    }
+
+    toast.current.show({ severity: "success", summary: "Éxito", detail: "Producto agregado" });
+
+    setNuevo(initProducto());
     cargarProductos();
   };
 
-  // ----------------- EDITAR PRODUCTO -----------------
-  const abrirEditar = (producto) => {
-    setEditData({
-      id: producto.id ?? null,
-      codigo_interno: producto.codigo_interno,
-      objeto: producto.objeto,
-      descripcion: producto.descripcion,
-      cantidad: producto.cantidad,
-      precio: producto.precio,
-    });
 
+  const abrirEditar = (producto) => {
+    setEditData({ ...producto });
     setEditVisible(true);
   };
 
-  const cancelarEdicion = () => {
-    setEditVisible(false);
-  };
-
   const guardarEdicion = async () => {
-    if (!validarCamposProducto(editData)) return;
+    if (!validarProducto(editData)) return;
 
-    const updateObj = {
-      codigo_interno: editData.codigo_interno.trim(),
-      objeto: editData.objeto.trim(),
-      descripcion: editData.descripcion.trim(),
-      cantidad: Number(editData.cantidad),
-      precio: Number(editData.precio),
-    };
+    const dataNormalizada = normalizarProducto(editData);
 
-    const tieneId = editData.id !== null && editData.id !== undefined;
+    const filtro = tieneId(editData)
+      ? { id: editData.id }
+      : { codigo_interno: editData.codigo_interno };
 
-    const query = supabase
-      .from("productos")
-      .update(updateObj)
-      .match(
-        tieneId
-          ? { id: editData.id }
-          : { codigo_interno: editData.codigo_interno }
-      );
-
-    const { error } = await query;
+    const { error } = await supabase.from("productos").update(dataNormalizada).match(filtro);
 
     if (error) {
       console.error(error);
-      toast.current.show({
-        severity: "error",
-        summary: "Error",
-        detail: "No se pudieron guardar los cambios",
-      });
+      toast.current.show({ severity: "error", summary: "Error", detail: "No se pudieron guardar los cambios" });
       return;
     }
 
-    toast.current.show({
-      severity: "success",
-      summary: "Guardado",
-      detail: "Producto actualizado",
-    });
+    toast.current.show({ severity: "success", summary: "Guardado", detail: "Producto actualizado" });
 
-    // reflejar cambios en memoria
-    setProductos((prev) =>
-      prev.map((p) => {
-        const match = tieneId
-          ? p.id === editData.id
-          : p.codigo_interno === editData.codigo_interno;
-
-        return match
-          ? {
-              ...p,
-              ...updateObj,
-              id: p.id !== undefined ? p.id : editData.id ?? p.id,
-            }
-          : p;
-      })
+    actualizarListaLocal(
+      tieneId(editData) ? filtrarPorId(editData) : filtrarPorCodigo(editData),
+      dataNormalizada
     );
 
     setEditVisible(false);
   };
 
-  // ----------------- DAR DE BAJA (ELIMINAR LÓGICO) -----------------
+
   const abrirEliminar = (producto) => {
     setProductoAEliminar(producto);
     setDeleteVisible(true);
-  };
-
-  const cancelarEliminar = () => {
-    setDeleteVisible(false);
-    setProductoAEliminar(null);
-    setEliminando(false);
   };
 
   const confirmarEliminar = async () => {
@@ -237,28 +182,14 @@ export default function Productos({ onBack }) {
 
     setEliminando(true);
 
-    const tieneId =
-      productoAEliminar.id !== null &&
-      productoAEliminar.id !== undefined;
-
-    const matchFilter = tieneId
+    const filtro = tieneId(productoAEliminar)
       ? { id: productoAEliminar.id }
       : { codigo_interno: productoAEliminar.codigo_interno };
 
-    // en vez de delete físico, marcamos activo = false
-    const { error } = await supabase
-      .from("productos")
-      .update({ activo: false })
-      .match(matchFilter);
+    const { error } = await supabase.from("productos").update({ activo: false }).match(filtro);
 
     if (error) {
-      console.error("BAJA error ->", error);
-      toast.current.show({
-        severity: "error",
-        summary: "Error",
-        detail:
-          "No se pudo dar de baja el producto: " + (error.message || ""),
-      });
+      toast.current.show({ severity: "error", summary: "Error", detail: "No se pudo dar de baja el producto" });
       setEliminando(false);
       return;
     }
@@ -269,384 +200,179 @@ export default function Productos({ onBack }) {
       detail: `"${productoAEliminar.objeto}" ya no está activo`,
     });
 
-    // sacarlo del estado local para que desaparezca visualmente
     setProductos((prev) =>
-      prev.filter((p) => {
-        return tieneId
-          ? p.id !== productoAEliminar.id
-          : p.codigo_interno !== productoAEliminar.codigo_interno;
-      })
+      prev.filter(
+        tieneId(productoAEliminar)
+          ? (p) => p.id !== productoAEliminar.id
+          : (p) => p.codigo_interno !== productoAEliminar.codigo_interno
+      )
     );
 
     setEliminando(false);
     setDeleteVisible(false);
-    setProductoAEliminar(null);
   };
 
-  // ----------------- TABLA: COLUMNA ACCIONES -----------------
-  const accionesTemplate = (rowData) => {
-    return (
-      <div
-        className="p-d-flex p-ai-center"
-        style={{ display: "flex", gap: ".5rem" }}
-      >
-        <Button
-          label="Editar"
-          icon="pi pi-pencil"
-          className="p-button-sm p-button-warning"
-          onClick={() => abrirEditar(rowData)}
-        />
-        <Button
-          label="Dar de baja"
-          icon="pi pi-trash"
-          className="p-button-sm p-button-danger"
-          onClick={() => abrirEliminar(rowData)}
-        />
-      </div>
-    );
-  };
 
-  // ----------------- RENDER -----------------
+  const accionesTemplate = (rowData) => (
+    <div style={{ display: "flex", gap: ".5rem" }}>
+      <Button label="Editar" icon="pi pi-pencil" className="p-button-sm p-button-warning" onClick={() => abrirEditar(rowData)} />
+      <Button label="Dar de baja" icon="pi pi-trash" className="p-button-sm p-button-danger" onClick={() => abrirEliminar(rowData)} />
+    </div>
+  );
+
   return (
     <main className="container" style={{ position: "relative" }}>
       <Toast ref={toast} />
 
-      {/* Volver al menú */}
       {onBack && (
-        <Button
-          label="← Volver al menú"
-          icon="pi pi-arrow-left"
-          className="p-button-sm p-button-secondary"
-          onClick={onBack}
-          style={{ marginBottom: "1rem" }}
-        />
+        <Button label="← Volver al menú" icon="pi pi-arrow-left" className="p-button-sm p-button-secondary" onClick={onBack} style={{ marginBottom: "1rem" }} />
       )}
 
       <h1>Gestor de Productos</h1>
 
-      {/* Formulario: Agregar producto */}
+      {/* Formulario agregar */}
       <Card title="Agregar producto" style={{ marginBottom: "1rem" }}>
         <div className="p-fluid grid formgrid">
           <div className="field col-12 md:col-3">
-            <InputText
-              placeholder="Código"
-              value={nuevo.codigo_interno}
-              onChange={(e) =>
-                setNuevo({
-                  ...nuevo,
-                  codigo_interno: e.target.value,
-                })
-              }
-            />
+            <InputText placeholder="Código" value={nuevo.codigo_interno} onChange={(e) => setNuevo({ ...nuevo, codigo_interno: e.target.value })} />
           </div>
 
           <div className="field col-12 md:col-3">
-            <InputText
-              placeholder="Objeto"
-              value={nuevo.objeto}
-              onChange={(e) =>
-                setNuevo({
-                  ...nuevo,
-                  objeto: e.target.value,
-                })
-              }
-            />
+            <InputText placeholder="Objeto" value={nuevo.objeto} onChange={(e) => setNuevo({ ...nuevo, objeto: e.target.value })} />
           </div>
 
           <div className="field col-12 md:col-3">
-            <InputText
-              placeholder="Descripción"
-              value={nuevo.descripcion}
-              onChange={(e) =>
-                setNuevo({
-                  ...nuevo,
-                  descripcion: e.target.value,
-                })
-              }
-            />
+            <InputText placeholder="Descripción" value={nuevo.descripcion} onChange={(e) => setNuevo({ ...nuevo, descripcion: e.target.value })} />
           </div>
 
           <div className="field col-12 md:col-1">
-            <InputNumber
-              placeholder="Cantidad"
-              value={nuevo.cantidad}
-              min={0}
-              onValueChange={(e) =>
-                setNuevo({
-                  ...nuevo,
-                  cantidad:
-                    e.value !== undefined && e.value !== null
-                      ? e.value
-                      : "",
-                })
-              }
-            />
+            <InputNumber placeholder="Cantidad" value={nuevo.cantidad} min={0} onValueChange={(e) => setNuevo({ ...nuevo, cantidad: manejarNumero(e.value) })} />
           </div>
 
           <div className="field col-12 md:col-2">
-            <InputNumber
-              placeholder="Precio"
-              value={nuevo.precio}
-              min={0}
-              onValueChange={(e) =>
-                setNuevo({
-                  ...nuevo,
-                  precio:
-                    e.value !== undefined && e.value !== null
-                      ? e.value
-                      : "",
-                })
-              }
-            />
+            <InputNumber placeholder="Precio" value={nuevo.precio} min={0} onValueChange={(e) => setNuevo({ ...nuevo, precio: manejarNumero(e.value) })} />
           </div>
 
           <div className="field col-12 md:col-2">
-            <Button
-              label="Agregar"
-              icon="pi pi-plus"
-              onClick={agregarProducto}
-            />
+            <Button label="Agregar" icon="pi pi-plus" onClick={agregarProducto} />
           </div>
         </div>
       </Card>
 
-      {/* Tabla de productos */}
+      {/* Tabla */}
       <Card title="Listado de productos">
         <DataTable value={productos} paginator rows={5} stripedRows>
-          {/* si existe id en la data, la mostramos */}
-          {"id" in (productos[0] || {}) && (
-            <Column field="id" header="ID" />
-          )}
-
+          {"id" in (productos[0] || {}) && <Column field="id" header="ID" />}
           <Column field="codigo_interno" header="Código" />
           <Column field="objeto" header="Objeto" />
           <Column field="descripcion" header="Descripción" />
           <Column field="cantidad" header="Stock" />
-          <Column
-            field="precio"
-            header="Precio"
-            body={(p) => `$${p.precio}`}
-          />
+          <Column field="precio" header="Precio" body={(p) => `$${p.precio}`} />
           <Column header="Acciones" body={accionesTemplate} />
         </DataTable>
       </Card>
 
       {/* MODAL EDITAR */}
       {editVisible && (
-        <>
-          {/* fondo oscurecido */}
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.6)",
-              zIndex: 999,
-            }}
-            onClick={cancelarEdicion}
-          />
-
-          {/* cajita flotante */}
-          <div
-            style={{
-              position: "fixed",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              background: "#1e1e1e",
-              color: "#fff",
-              borderRadius: "12px",
-              padding: "1rem 1.5rem",
-              width: "320px",
-              maxWidth: "90vw",
-              boxShadow: "0 20px 50px rgba(0,0,0,.9)",
-              border: "1px solid #444",
-              zIndex: 1000,
-              fontFamily: "system-ui, sans-serif",
-            }}
-          >
-            <h2 style={{ marginTop: 0, fontSize: "1.1rem" }}>
-              Editar producto
-            </h2>
+        <ModalFondo onClick={() => setEditVisible(false)}>
+          <ModalCaja>
+            <h2>Editar producto</h2>
 
             <div className="p-fluid grid formgrid" style={{ rowGap: ".5rem" }}>
-              <div className="field col-12">
-                <small>Código interno</small>
-                <InputText
-                  value={editData.codigo_interno}
-                  onChange={(e) =>
-                    setEditData({
-                      ...editData,
-                      codigo_interno: e.target.value,
-                    })
-                  }
-                />
-              </div>
+              <Campo label="Código interno">
+                <InputText value={editData.codigo_interno} onChange={(e) => setEditData({ ...editData, codigo_interno: e.target.value })} />
+              </Campo>
 
-              <div className="field col-12">
-                <small>Objeto</small>
-                <InputText
-                  value={editData.objeto}
-                  onChange={(e) =>
-                    setEditData({
-                      ...editData,
-                      objeto: e.target.value,
-                    })
-                  }
-                />
-              </div>
+              <Campo label="Objeto">
+                <InputText value={editData.objeto} onChange={(e) => setEditData({ ...editData, objeto: e.target.value })} />
+              </Campo>
 
-              <div className="field col-12">
-                <small>Descripción</small>
-                <InputText
-                  value={editData.descripcion}
-                  onChange={(e) =>
-                    setEditData({
-                      ...editData,
-                      descripcion: e.target.value,
-                    })
-                  }
-                />
-              </div>
+              <Campo label="Descripción">
+                <InputText value={editData.descripcion} onChange={(e) => setEditData({ ...editData, descripcion: e.target.value })} />
+              </Campo>
 
-              <div className="field col-6">
-                <small>Cantidad</small>
-                <InputNumber
-                  value={editData.cantidad}
-                  min={0}
-                  onValueChange={(e) =>
-                    setEditData({
-                      ...editData,
-                      cantidad:
-                        e.value !== undefined && e.value !== null
-                          ? e.value
-                          : "",
-                    })
-                  }
-                />
-              </div>
+              <Campo label="Cantidad" small col="6">
+                <InputNumber value={editData.cantidad} min={0} onValueChange={(e) => setEditData({ ...editData, cantidad: manejarNumero(e.value) })} />
+              </Campo>
 
-              <div className="field col-6">
-                <small>Precio</small>
-                <InputNumber
-                  value={editData.precio}
-                  min={0}
-                  onValueChange={(e) =>
-                    setEditData({
-                      ...editData,
-                      precio:
-                        e.value !== undefined && e.value !== null
-                          ? e.value
-                          : "",
-                    })
-                  }
-                />
-              </div>
+              <Campo label="Precio" small col="6">
+                <InputNumber value={editData.precio} min={0} onValueChange={(e) => setEditData({ ...editData, precio: manejarNumero(e.value) })} />
+              </Campo>
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: ".5rem",
-                marginTop: "1rem",
-              }}
-            >
-              <Button
-                label="Cancelar"
-                className="p-button-sm p-button-secondary"
-                onClick={cancelarEdicion}
-              />
-              <Button
-                label="Guardar"
-                icon="pi pi-check"
-                className="p-button-sm p-button-success"
-                onClick={guardarEdicion}
-              />
+            <div className="flex-end">
+              <Button label="Cancelar" className="p-button-sm p-button-secondary" onClick={() => setEditVisible(false)} />
+              <Button label="Guardar" icon="pi pi-check" className="p-button-sm p-button-success" onClick={guardarEdicion} />
             </div>
-          </div>
-        </>
+          </ModalCaja>
+        </ModalFondo>
       )}
 
-      {/* MODAL DAR DE BAJA */}
+      {/* MODAL ELIMINAR */}
       {deleteVisible && (
-        <>
-          {/* fondo oscurecido */}
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.6)",
-              zIndex: 999,
-            }}
-            onClick={cancelarEliminar}
-          />
+        <ModalFondo onClick={() => setDeleteVisible(false)}>
+          <ModalCaja rojo>
+            <h2>Dar de baja producto</h2>
+            <p>¿Seguro que querés dar de baja <strong>{productoAEliminar?.objeto}</strong>?</p>
 
-          {/* caja flotante roja */}
-          <div
-            style={{
-              position: "fixed",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              background: "#2a0000",
-              color: "#fff",
-              borderRadius: "12px",
-              padding: "1rem 1.5rem",
-              width: "320px",
-              maxWidth: "90vw",
-              boxShadow: "0 20px 50px rgba(0,0,0,.9)",
-              border: "1px solid #622",
-              zIndex: 1000,
-              fontFamily: "system-ui, sans-serif",
-            }}
-          >
-            <h2
-              style={{
-                marginTop: 0,
-                fontSize: "1.1rem",
-                color: "#fff",
-              }}
-            >
-              Dar de baja producto
-            </h2>
-
-            <p
-              style={{
-                fontSize: ".9rem",
-                lineHeight: "1.3rem",
-                color: "#ddd",
-              }}
-            >
-              ¿Seguro que querés dar de baja{" "}
-              <strong>{productoAEliminar?.objeto}</strong>? No va a aparecer más
-              para vender.
-            </p>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: ".5rem",
-                marginTop: "1rem",
-              }}
-            >
-              <Button
-                label="Cancelar"
-                className="p-button-sm p-button-secondary"
-                onClick={cancelarEliminar}
-                disabled={eliminando}
-              />
-              <Button
-                label={eliminando ? "Procesando..." : "Sí, dar de baja"}
-                icon="pi pi-trash"
-                className="p-button-sm p-button-danger"
-                onClick={confirmarEliminar}
-                disabled={eliminando}
-              />
+            <div className="flex-end">
+              <Button label="Cancelar" className="p-button-sm p-button-secondary" onClick={() => setDeleteVisible(false)} disabled={eliminando} />
+              <Button label={eliminando ? "Procesando..." : "Sí, dar de baja"} icon="pi pi-trash" className="p-button-sm p-button-danger" onClick={confirmarEliminar} disabled={eliminando} />
             </div>
-          </div>
-        </>
+          </ModalCaja>
+        </ModalFondo>
       )}
     </main>
+  );
+}
+
+
+function ModalFondo({ children, onClick }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.6)",
+        zIndex: 999,
+      }}
+      onClick={onClick}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ModalCaja({ children, rojo }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+        background: rojo ? "#2a0000" : "#1e1e1e",
+        color: "#fff",
+        borderRadius: "12px",
+        padding: "1rem 1.5rem",
+        width: "320px",
+        maxWidth: "90vw",
+        boxShadow: "0 20px 50px rgba(0,0,0,.9)",
+        border: rojo ? "1px solid #622" : "1px solid #444",
+        zIndex: 1000,
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Campo({ children, label, col = "12", small }) {
+  return (
+    <div className={`field col-${col}`} style={{ marginBottom: small ? ".3rem" : ".8rem" }}>
+      <small>{label}</small>
+      {children}
+    </div>
   );
 }

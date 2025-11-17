@@ -10,7 +10,7 @@ import { Dropdown } from "primereact/dropdown";
 import { Toast } from "primereact/toast";
 
 export default function Ventas({ onBack }) {
-  const [productos, setProductos] = useState([]); // 👈 ahora vive acá
+  const [productos, setProductos] = useState([]);
   const [ventas, setVentas] = useState([]);
   const [venta, setVenta] = useState({
     producto_id: "",
@@ -76,11 +76,9 @@ export default function Ventas({ onBack }) {
         detail: "Stock actualizado",
       });
 
-      // refrescar pantallas
       cargarProductos();
       cargarVentas();
 
-      // reset form
       setVenta({
         producto_id: "",
         cantidad: 0,

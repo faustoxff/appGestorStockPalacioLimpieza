@@ -68,9 +68,7 @@ export default function Facturacion({ onBack }) {
       ? totalConDescuento
       : totalFactura;
 
-  // ===============================
-  // 📄 FACTURA LOCAL (SIN AFIP)
-  // ===============================
+
   const generarFactura = async () => {
     if (items.length === 0) return alert("No hay productos en la factura.");
 
@@ -196,7 +194,7 @@ export default function Facturacion({ onBack }) {
         />
       )}
 
-      <Card title="Facturación Local">
+      <Card title="Facturación">
         <div className="p-fluid grid formgrid">
           <div className="field col-12 md:col-5">
             <Dropdown
